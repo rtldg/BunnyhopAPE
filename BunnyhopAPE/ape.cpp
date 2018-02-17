@@ -13,14 +13,14 @@ int g_iOldState;
 
 void Error(char* text)
 {
-	MessageBox(0, text, "ERROR", 16);
+	//MessageBox(0, text, "ERROR", 16);
 	ExitProcess(0);
 }
 
 void UpdateConlole()
 {
 	system("cls");
-	printf("Use SCROLL LOCK to toggle prediction.\nPrediction status: %s\n", g_bPatched ? "ON" : "OFF");
+	printf("Use F5 to toggle prediction.\nPrediction status: %s\n", g_bPatched ? "ON" : "OFF");
 }
 
 void EnablePrediction()
@@ -93,9 +93,9 @@ int main()
 
 	while (1)
 	{
-		if (GetKeyState(VK_SCROLL) & 1 && !g_bPatched)
+		if (GetKeyState(VK_F5) & 1 && !g_bPatched)
 			EnablePrediction();
-		else if (!(GetKeyState(VK_SCROLL) & 1) && g_bPatched)
+		else if (!(GetKeyState(VK_F5) & 1) && g_bPatched)
 			DisablePrediction();
 		Sleep(100);
 	}
