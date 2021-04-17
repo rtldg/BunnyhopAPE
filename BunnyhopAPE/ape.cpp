@@ -4,6 +4,8 @@
 #include <conio.h>
 #include "ape_helpers.h"
 
+#define GAMEMOVEMENT_JUMP_HEIGHT 58.495f
+
 HANDLE g_hProcess;
 BYTE* g_pJumpPrediction;
 BYTE g_patchedBuffer[6];
@@ -19,7 +21,7 @@ DWORD g_oldFloatOffsetPtr;
 DWORD g_floatOffsetPtr;
 
 double g_oldJumpHeight;
-double g_newJumpHeight = 93592.0;
+double g_newJumpHeight = 2 * 800.f * GAMEMOVEMENT_JUMP_HEIGHT;
 
 void Error(char* text)
 {
