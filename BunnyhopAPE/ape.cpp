@@ -89,15 +89,26 @@ int main()
 
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)&ConsoleHandler, true);
 	UpdateConlole();
+	EnablePrediction();
+
+	bool toggle_state = false;
 
 	while (1)
 	{
 		if (WaitForSingleObject(g_hProcess, 0) != WAIT_TIMEOUT)
 			return 0;
-		if (GetKeyState(VK_F5) & 1 && !g_bPatched)
-			EnablePrediction();
-		else if (!(GetKeyState(VK_F5) & 1) && g_bPatched)
-			DisablePrediction();
+
+		bool current_state = !!(GetKeyState(VK_F5) & 1);
+
+		if (toggle_state != current_state)
+		{
+			if (g_bPatched)
+				DisablePrediction();
+			else
+				EnablePrediction();
+		}
+
+		toggle_state = current_state;
 		Sleep(100);
 	}
 
