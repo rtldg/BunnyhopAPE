@@ -11,6 +11,8 @@ BYTE g_nopBuffer[6] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
 bool g_bPatched;
 int g_iOldState;
 
+#define HARDCODED_PATH "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Source\\"
+
 void Error(char* text)
 {
 	//MessageBox(0, text, "ERROR", 16);
@@ -56,18 +58,15 @@ bool WINAPI ConsoleHandler(DWORD dwCtrlType)
 
 int main()
 {
-	SetConsoleTitle("CS:S Autobhop Prediction Enabler by alkatrazbhop");
+	SetConsoleTitleA("CS:S Autobhop Prediction Enabler by alkatrazbhop");
 
-	DWORD processID;
-	printf("Waiting for CS:S to start...");
-	while (1)
-	{
-		processID = GetPIDByName("hl2.exe");
-		if (processID) break;
-		Sleep(1000);
-	}
+	PROCESS_INFORMATION pi = {};
+	STARTUPINFOA si = {};
+	CreateProcessA(HARDCODED_PATH "hl2.exe", "-steam -game cstrike -novid -console -insecure", NULL, NULL, FALSE, 0, NULL, HARDCODED_PATH, &si, &pi);
 
-	g_hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processID);
+	g_hProcess = pi.hProcess;
+
+	DWORD processID = GetProcessId(g_hProcess);
 
 	DWORD pClient;
 	while (1)
@@ -93,6 +92,8 @@ int main()
 
 	while (1)
 	{
+		if (WaitForSingleObject(g_hProcess, 0) != WAIT_TIMEOUT)
+			return 0;
 		if (GetKeyState(VK_F5) & 1 && !g_bPatched)
 			EnablePrediction();
 		else if (!(GetKeyState(VK_F5) & 1) && g_bPatched)
