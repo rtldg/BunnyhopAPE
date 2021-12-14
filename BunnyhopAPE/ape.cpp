@@ -90,6 +90,7 @@ int main()
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)&ConsoleHandler, true);
 	UpdateConlole();
 	EnablePrediction();
+	ShowWindow(GetConsoleWindow(), SW_MINIMIZE);
 
 	bool toggle_state = false;
 
