@@ -50,7 +50,15 @@ DWORD GetModuleHandleExtern(DWORD dwProcessId, LPSTR lpModuleName)
 DWORD FindPatternEx(HANDLE hProc, DWORD base, DWORD len, BYTE* sig, char* mask)
 {
 	BYTE* buf = (BYTE*)VirtualAlloc(0, len, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-	if (ReadProcessMemory(hProc, (LPCVOID)base, buf, len, NULL))
+	SIZE_T bytes_read = 0;
+	SIZE_T total_read = 0;
+
+	while (total_read < len && ReadProcessMemory(hProc, (LPCVOID)(base+total_read), buf+total_read, len-total_read, &bytes_read))
+	{
+		total_read += bytes_read;
+	}
+
+	//if (ReadProcessMemory(hProc, (LPCVOID)base, buf, len, &bytes_read))
 	{
 		for (DWORD i = 0; i <= (len - strlen(mask)); i++)
 		{

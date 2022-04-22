@@ -5,11 +5,16 @@
 #include "ape_helpers.h"
 
 HANDLE g_hProcess;
+BYTE* g_pFUCKD3D9;
+BYTE* g_pReleaseVideo;
 BYTE* g_pJumpPrediction;
 BYTE g_patchedBuffer[6];
 BYTE g_nopBuffer[6] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
 bool g_bPatched;
+bool fullscreenhook;
 int g_iOldState;
+DWORD pEngine;
+DWORD pD3D9;
 
 #define HARDCODED_PATH "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Source\\"
 
@@ -22,7 +27,24 @@ void Error(char* text)
 void UpdateConlole()
 {
 	system("cls");
-	printf("Use F5 to toggle prediction.\nPrediction status: %s\n", g_bPatched ? "ON" : "OFF");
+
+	printf("Use F5 to toggle prediction.\nF6 to toggle fullscreenhook.\nPrediction status: %s | fullscreenhook: %s\n", g_bPatched ? "ON" : "OFF", fullscreenhook ? "ON" : "OFF");
+}
+
+void enablefullscreenhook()
+{
+	char d3djmp[] = { 0x90, 0xE9 };
+	WriteProcessMemory(g_hProcess, g_pFUCKD3D9, d3djmp, 2, NULL);
+	fullscreenhook = true;
+	UpdateConlole();
+}
+
+void disablefullscreenhook()
+{
+	char d3djz[] = { 0x0f, 0x84 };
+	WriteProcessMemory(g_hProcess, g_pFUCKD3D9, d3djz, 2, NULL);
+	fullscreenhook = false;
+	UpdateConlole();
 }
 
 void EnablePrediction()
@@ -32,6 +54,9 @@ void EnablePrediction()
 	if (WriteProcessMemory(g_hProcess, g_pJumpPrediction, g_nopBuffer, 6, NULL))
 		g_bPatched = true;
 	else Error("Game is already patched or signatures are outdated!");
+
+	char shortjmp[] = { 0xEB };
+	WriteProcessMemory(g_hProcess, g_pReleaseVideo + 12, shortjmp, 1, NULL);
 
 	UpdateConlole();
 }
@@ -44,6 +69,9 @@ void DisablePrediction(bool notify = true)
 			g_bPatched = false;
 	}
 	else Error("Memory access violation!");
+
+	char shortjnz[] = { 0x75 };
+	WriteProcessMemory(g_hProcess, g_pReleaseVideo + 12, shortjnz, 1, NULL);
 
 	UpdateConlole();
 }
@@ -76,6 +104,9 @@ int main()
 		Sleep(100);
 	}
 
+	pEngine = (DWORD)GetModuleHandleExtern(processID, "engine.dll");
+	pD3D9 = (DWORD)GetModuleHandleExtern(processID, "d3d9.dll");
+
 	DWORD pHL = (DWORD)GetModuleHandleExtern(processID, "hl2.exe");
 	DWORD* pCmdLine = (DWORD*)(FindPatternEx(g_hProcess, pHL, 0x4000, (PBYTE)"\x85\xC0\x79\x08\x6A\x08", "xxxxxx") - 0x13);
 	char* cmdLine = new char[255];
@@ -86,34 +117,47 @@ int main()
 		Error("-insecure key is missing!");
 
 	g_pJumpPrediction = (BYTE*)(FindPatternEx(g_hProcess, pClient, 0x200000, (PBYTE)"\x85\xC0\x8B\x46\x08\x0F\x84\x00\xFF\xFF\xFF\xF6\x40\x28\x02\x0F\x85\x00\xFF\xFF\xFF", "xxxxxxx?xxxxxxxxx?xxx")) + 15;
+	g_pReleaseVideo = (BYTE*)(FindPatternEx(g_hProcess, pEngine, 0x2000000, (PBYTE)"\x56\x8B\xF1\x8B\x06\x8B\x40\x2A\xFF\xD0\x84\xC0\x75\x2A\x8B\x06", "xxxxxxx?xxxxx?xx"));
+	g_pFUCKD3D9 = (BYTE*)(FindPatternEx(g_hProcess, pD3D9, 0x2000000, (PBYTE)"\x0F\x84\x2A\x2A\x2A\x2A\x6A\x07\xFF\xB3", "xx????xxxx"));
 
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)&ConsoleHandler, true);
-	UpdateConlole();
+	enablefullscreenhook();
 	EnablePrediction();
+	UpdateConlole();
 	ShowWindow(GetConsoleWindow(), SW_MINIMIZE);
 
-	bool toggle_state = false;
+	bool toggle_state_f5 = false;
+	bool toggle_state_f6 = false;
 
 	while (1)
 	{
 		if (WaitForSingleObject(g_hProcess, 0) != WAIT_TIMEOUT)
 			return 0;
 
-		bool current_state = !!(GetKeyState(VK_F5) & 1);
-
-		if (toggle_state != current_state)
+		bool current_state_f5 = !!(GetKeyState(VK_F5) & 1);
+		if (toggle_state_f5 != current_state_f5)
 		{
 			if (g_bPatched)
 				DisablePrediction();
 			else
 				EnablePrediction();
 		}
+		toggle_state_f5 = current_state_f5;
 
-		toggle_state = current_state;
+		bool current_state_f6 = !!(GetKeyState(VK_F6) & 1);
+		if (toggle_state_f6 != current_state_f6)
+		{
+			if (fullscreenhook)
+				disablefullscreenhook();
+			else
+				enablefullscreenhook();
+		}
+		toggle_state_f6 = current_state_f6;
+
 		Sleep(100);
 	}
 
-	CloseHandle(g_hProcess);
-	while (_getch() != VK_RETURN) {}
+	//CloseHandle(g_hProcess);
+	//while (_getch() != VK_RETURN) {}
 	return false;
 }
