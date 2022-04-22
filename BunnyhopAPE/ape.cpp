@@ -4,6 +4,9 @@
 #include <conio.h>
 #include "ape_helpers.h"
 
+#define GAMEMOVEMENT_JUMP_HEIGHT 58.495f
+#define LANDFIX_PATCH 0
+
 HANDLE g_hProcess;
 BYTE* g_pFUCKD3D9;
 BYTE* g_pReleaseVideo;
@@ -18,13 +21,24 @@ DWORD pD3D9;
 
 #define HARDCODED_PATH "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Source\\"
 
+#if LANDFIX_PATCH
+DWORD g_jumpHeightPtrPtr;
+DWORD g_jumpHeightPtr;
+DWORD g_valuePtr;
+DWORD g_floatOffsetPtrPtr;
+DWORD g_oldFloatOffsetPtr;
+DWORD g_floatOffsetPtr;
+
+double g_oldJumpHeight;
+double g_newJumpHeight = 2 * 800.f * GAMEMOVEMENT_JUMP_HEIGHT;
+#endif
+
 void Error(char* text)
 {
 	//MessageBox(0, text, "ERROR", 16);
 	ExitProcess(0);
 }
-
-void UpdateConlole()
+void UpdateConsole()
 {
 	system("cls");
 
@@ -36,7 +50,6 @@ void enablefullscreenhook()
 	char d3djmp[] = { 0x90, 0xE9 };
 	WriteProcessMemory(g_hProcess, g_pFUCKD3D9, d3djmp, 2, NULL);
 	fullscreenhook = true;
-	UpdateConlole();
 }
 
 void disablefullscreenhook()
@@ -44,12 +57,28 @@ void disablefullscreenhook()
 	char d3djz[] = { 0x0f, 0x84 };
 	WriteProcessMemory(g_hProcess, g_pFUCKD3D9, d3djz, 2, NULL);
 	fullscreenhook = false;
-	UpdateConlole();
 }
 
 void EnablePrediction()
 {
 	ReadProcessMemory(g_hProcess, g_pJumpPrediction, g_patchedBuffer, 6, NULL);
+
+#if LANDFIX_PATCH
+	ReadProcessMemory(g_hProcess, LPVOID(g_jumpHeightPtrPtr), &g_jumpHeightPtr, sizeof(g_jumpHeightPtr), NULL);
+	ReadProcessMemory(g_hProcess, LPVOID(g_jumpHeightPtr), &g_oldJumpHeight, sizeof(g_oldJumpHeight), NULL);
+	ReadProcessMemory(g_hProcess, LPVOID(g_floatOffsetPtrPtr), &g_oldFloatOffsetPtr, sizeof(g_oldFloatOffsetPtr), NULL);
+
+	DWORD Old;
+	VirtualProtectEx(g_hProcess, LPVOID(DWORD(g_floatOffsetPtrPtr) & ~0xfff), 0x4000, PAGE_EXECUTE_READWRITE, &Old);
+	WriteProcessMemory(g_hProcess, LPVOID(g_floatOffsetPtrPtr), &g_valuePtr, sizeof(g_valuePtr), NULL);
+	VirtualProtectEx(g_hProcess, LPVOID(DWORD(g_floatOffsetPtrPtr) & ~0xfff), 0x4000, Old, &Old);
+
+	ReadProcessMemory(g_hProcess, LPVOID(g_floatOffsetPtrPtr), &g_floatOffsetPtr, sizeof(g_floatOffsetPtr), NULL);
+
+	VirtualProtectEx(g_hProcess, LPVOID(DWORD(g_jumpHeightPtr) & ~0xfff), 0x4000, PAGE_EXECUTE_READWRITE, &Old);
+	WriteProcessMemory(g_hProcess, LPVOID(g_jumpHeightPtr), &g_newJumpHeight, sizeof(g_newJumpHeight), NULL);
+	VirtualProtectEx(g_hProcess, LPVOID(DWORD(g_jumpHeightPtr) & ~0xfff), 0x4000, Old, &Old);
+#endif
 
 	if (WriteProcessMemory(g_hProcess, g_pJumpPrediction, g_nopBuffer, 6, NULL))
 		g_bPatched = true;
@@ -57,12 +86,21 @@ void EnablePrediction()
 
 	char shortjmp[] = { 0xEB };
 	WriteProcessMemory(g_hProcess, g_pReleaseVideo + 12, shortjmp, 1, NULL);
-
-	UpdateConlole();
 }
 
 void DisablePrediction(bool notify = true)
 {
+#if LANDFIX_PATCH
+	DWORD Old;
+	VirtualProtectEx(g_hProcess, LPVOID(DWORD(g_jumpHeightPtr) & ~0xfff), 0x4000, PAGE_EXECUTE_READWRITE, &Old);
+	WriteProcessMemory(g_hProcess, LPVOID(g_jumpHeightPtr), &g_oldJumpHeight, sizeof(g_oldJumpHeight), NULL);
+	VirtualProtectEx(g_hProcess, LPVOID(DWORD(g_jumpHeightPtr) & ~0xfff), 0x4000, Old, &Old);
+
+	VirtualProtectEx(g_hProcess, LPVOID(DWORD(g_floatOffsetPtrPtr) & ~0xfff), 0x4000, PAGE_EXECUTE_READWRITE, &Old);
+	WriteProcessMemory(g_hProcess, LPVOID(g_floatOffsetPtrPtr), &g_oldFloatOffsetPtr, sizeof(g_oldFloatOffsetPtr), NULL);
+	VirtualProtectEx(g_hProcess, LPVOID(DWORD(g_floatOffsetPtrPtr) & ~0xfff), 0x4000, Old, &Old);
+#endif
+
 	if (WriteProcessMemory(g_hProcess, g_pJumpPrediction, g_patchedBuffer, 6, NULL))
 	{
 		if (notify)
@@ -72,8 +110,6 @@ void DisablePrediction(bool notify = true)
 
 	char shortjnz[] = { 0x75 };
 	WriteProcessMemory(g_hProcess, g_pReleaseVideo + 12, shortjnz, 1, NULL);
-
-	UpdateConlole();
 }
 
 bool WINAPI ConsoleHandler(DWORD dwCtrlType)
@@ -117,13 +153,20 @@ int main()
 		Error("-insecure key is missing!");
 
 	g_pJumpPrediction = (BYTE*)(FindPatternEx(g_hProcess, pClient, 0x200000, (PBYTE)"\x85\xC0\x8B\x46\x08\x0F\x84\x00\xFF\xFF\xFF\xF6\x40\x28\x02\x0F\x85\x00\xFF\xFF\xFF", "xxxxxxx?xxxxxxxxx?xxx")) + 15;
+
+#if LANDFIX_PATCH
+	g_jumpHeightPtrPtr = (FindPatternEx(g_hProcess, pClient, 0x200000, (PBYTE)"\xDD\x05\x00\x00\x00\x00\xD9\xFA\xD8\x4D\xFC\xD9\x59\x48", "xx????xxxxxxxx")) + 2;
+	g_valuePtr = (FindPatternEx(g_hProcess, pClient, 0x200000, (PBYTE)"\xC7\x45\x00\x00\x00\x00\x00\x0F\x87\x00\x00\x00\x00\xE8\x00\x00\x00\x00\x8B\xC8", "xx?????xx????x????xx")) + 3;
+	g_floatOffsetPtrPtr = (FindPatternEx(g_hProcess, pClient, 0x200000, (PBYTE)"\xF3\x0F\x5C\x05\x00\x00\x00\x00\xF3\x0F\x11\x45\x00\xF3\x0F\x10\x80\x00\x00\x00\x00\xF3\x0F\x11\x45\x00", "xxxx????xxxx?xxxx????xxxx?")) + 4;
+#endif
+
 	g_pReleaseVideo = (BYTE*)(FindPatternEx(g_hProcess, pEngine, 0x2000000, (PBYTE)"\x56\x8B\xF1\x8B\x06\x8B\x40\x2A\xFF\xD0\x84\xC0\x75\x2A\x8B\x06", "xxxxxxx?xxxxx?xx"));
 	g_pFUCKD3D9 = (BYTE*)(FindPatternEx(g_hProcess, pD3D9, 0x2000000, (PBYTE)"\x0F\x84\x2A\x2A\x2A\x2A\x6A\x07\xFF\xB3", "xx????xxxx"));
 
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)&ConsoleHandler, true);
 	enablefullscreenhook();
 	EnablePrediction();
-	UpdateConlole();
+	UpdateConsole();
 	ShowWindow(GetConsoleWindow(), SW_MINIMIZE);
 
 	bool toggle_state_f5 = false;
@@ -141,6 +184,7 @@ int main()
 				DisablePrediction();
 			else
 				EnablePrediction();
+			UpdateConsole();
 		}
 		toggle_state_f5 = current_state_f5;
 
@@ -151,6 +195,7 @@ int main()
 				disablefullscreenhook();
 			else
 				enablefullscreenhook();
+			UpdateConsole();
 		}
 		toggle_state_f6 = current_state_f6;
 
